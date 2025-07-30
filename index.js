@@ -1,95 +1,63 @@
 const express = require("express");
 const axios = require("axios");
 const FormData = require("form-data");
-const fs = require("fs");
-const path = require("path");
-const { v4: uuidv4 } = require("uuid");
+require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-const replicateApiKey = "r8_HnKrKiaBeULPphI4kvAaAwVUFWa9cVP3F2IBi";
-const modelVersion = "a9758cb3b371d51b2d6a72a1ff52b504308e9c4f508314985b98b16bda04890a"; // AnimeGANv2
+const port = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("✅ AnimeGAN API is running");
+  res.send("✅ AnimeGAN API is running!");
 });
 
 app.get("/generate", async (req, res) => {
   const imageUrl = req.query.imageUrl;
-  if (!imageUrl) return res.status(400).json({ error: "Missing imageUrl query" });
+  const replicateApiKey = process.env.REPLICATE_API_KEY;
+
+  if (!imageUrl) return res.status(400).send("❌ imageUrl parameter is missing");
 
   try {
-    // Send to Replicate
-    const replicateResponse = await axios.post(
+    const response = await axios.post(
       "https://api.replicate.com/v1/predictions",
       {
-        version: modelVersion,
+        version: "cb05b9f82b145c229351f27c4c554be568a5d1b5f243fe5f0c1fd8b2f8a9c8b0", // AnimeGAN-v2 version
         input: { image: imageUrl }
       },
       {
         headers: {
-          "Authorization": `Token ${replicateApiKey}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Token ${replicateApiKey}`
         }
       }
     );
 
-    const getUrl = replicateResponse.data.urls.get;
+    const getUrl = response.data.urls.get;
+    let outputUrl = null;
 
-    // Wait until processing done
-    let outputUrl;
-    for (let i = 0; i < 15; i++) {
-      const statusResponse = await axios.get(getUrl, {
-        headers: { Authorization: `Token ${replicateApiKey}` }
+    // Poll until result is ready
+    while (!outputUrl) {
+      const result = await axios.get(getUrl, {
+        headers: {
+          Authorization: `Token ${replicateApiKey}`
+        }
       });
 
-      if (statusResponse.data.status === "succeeded") {
-        outputUrl = statusResponse.data.output;
+      if (result.data.status === "succeeded") {
+        outputUrl = result.data.output;
         break;
+      } else if (result.data.status === "failed") {
+        return res.status(500).send("❌ Generation failed");
       }
 
-      if (statusResponse.data.status === "failed") {
-        return res.status(500).json({ error: "❌ Replicate failed to process image." });
-      }
-
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    if (!outputUrl) {
-      return res.status(500).json({ error: "❌ Timed out waiting for Replicate." });
-    }
-
-    // Download image locally
-    const filename = `anime_${uuidv4()}.png`;
-    const filepath = path.join(__dirname, filename);
-    const writer = fs.createWriteStream(filepath);
-    const imageStream = await axios.get(outputUrl, { responseType: "stream" });
-    imageStream.data.pipe(writer);
-
-    await new Promise((resolve, reject) => {
-      writer.on("finish", resolve);
-      writer.on("error", reject);
-    });
-
-    // Upload to Catbox
-    const form = new FormData();
-    form.append("reqtype", "fileupload");
-    form.append("fileToUpload", fs.createReadStream(filepath));
-
-    const catboxUpload = await axios.post("https://catbox.moe/user/api.php", form, {
-      headers: form.getHeaders()
-    });
-
-    fs.unlinkSync(filepath); // cleanup local file
-
-    res.json({ animeImage: catboxUpload.data });
+    res.json({ anime_image_url: outputUrl });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "❌ Failed to process image." });
+    res.status(500).send("❌ Error: Failed to process image.");
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ AnimeGAN API running on port ${PORT}`);
-});
+app.listen(port, () => {
+  console.log(`✅
