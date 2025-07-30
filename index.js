@@ -1,63 +1,95 @@
 const express = require("express");
 const axios = require("axios");
-const app = express();
+const FormData = require("form-data");
+const fs = require("fs");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
 
-const REPLICATE_API_TOKEN = "r8_HnKrKiaBeULPphI4kvAaAwVUFWa9cVP3F2IBi";
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+const replicateApiKey = "r8_HnKrKiaBeULPphI4kvAaAwVUFWa9cVP3F2IBi";
+const modelVersion = "a9758cb3b371d51b2d6a72a1ff52b504308e9c4f508314985b98b16bda04890a"; // AnimeGANv2
+
+app.get("/", (req, res) => {
+  res.send("✅ AnimeGAN API is running");
+});
 
 app.get("/generate", async (req, res) => {
   const imageUrl = req.query.imageUrl;
-  if (!imageUrl) return res.status(400).send("Missing imageUrl");
+  if (!imageUrl) return res.status(400).json({ error: "Missing imageUrl query" });
 
   try {
-    const response = await axios.post(
+    // Send to Replicate
+    const replicateResponse = await axios.post(
       "https://api.replicate.com/v1/predictions",
       {
-        version: "8a7c370c...8c1d58b80e0b2be2cc459a5", // AnimeGANv2 version ID
-        input: {
-          image: imageUrl
-        }
+        version: modelVersion,
+        input: { image: imageUrl }
       },
       {
         headers: {
-          "Authorization": `Token ${REPLICATE_API_TOKEN}`,
+          "Authorization": `Token ${replicateApiKey}`,
           "Content-Type": "application/json"
         }
       }
     );
 
-    const prediction = response.data;
+    const getUrl = replicateResponse.data.urls.get;
 
-    // Wait for completion
-    let result;
-    while (
-      prediction.status !== "succeeded" &&
-      prediction.status !== "failed"
-    ) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait until processing done
+    let outputUrl;
+    for (let i = 0; i < 15; i++) {
+      const statusResponse = await axios.get(getUrl, {
+        headers: { Authorization: `Token ${replicateApiKey}` }
+      });
 
-      const check = await axios.get(
-        `https://api.replicate.com/v1/predictions/${prediction.id}`,
-        {
-          headers: {
-            "Authorization": `Token ${REPLICATE_API_TOKEN}`
-          }
-        }
-      );
+      if (statusResponse.data.status === "succeeded") {
+        outputUrl = statusResponse.data.output;
+        break;
+      }
 
-      Object.assign(prediction, check.data);
+      if (statusResponse.data.status === "failed") {
+        return res.status(500).json({ error: "❌ Replicate failed to process image." });
+      }
+
+      await new Promise(r => setTimeout(r, 3000));
     }
 
-    if (prediction.status === "succeeded") {
-      return res.json({ output: prediction.output });
-    } else {
-      return res.status(500).json({ error: "Failed to generate image." });
+    if (!outputUrl) {
+      return res.status(500).json({ error: "❌ Timed out waiting for Replicate." });
     }
+
+    // Download image locally
+    const filename = `anime_${uuidv4()}.png`;
+    const filepath = path.join(__dirname, filename);
+    const writer = fs.createWriteStream(filepath);
+    const imageStream = await axios.get(outputUrl, { responseType: "stream" });
+    imageStream.data.pipe(writer);
+
+    await new Promise((resolve, reject) => {
+      writer.on("finish", resolve);
+      writer.on("error", reject);
+    });
+
+    // Upload to Catbox
+    const form = new FormData();
+    form.append("reqtype", "fileupload");
+    form.append("fileToUpload", fs.createReadStream(filepath));
+
+    const catboxUpload = await axios.post("https://catbox.moe/user/api.php", form, {
+      headers: form.getHeaders()
+    });
+
+    fs.unlinkSync(filepath); // cleanup local file
+
+    res.json({ animeImage: catboxUpload.data });
   } catch (err) {
-    console.error("API error:", err?.response?.data || err.message);
-    return res.status(500).send("❌ Error: Failed to process image.");
+    console.error(err);
+    res.status(500).json({ error: "❌ Failed to process image." });
   }
 });
 
-app.listen(3000, () => {
-  console.log("AnimeGAN API is running on port 3000");
+app.listen(PORT, () => {
+  console.log(`✅ AnimeGAN API running on port ${PORT}`);
 });
