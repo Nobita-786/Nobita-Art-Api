@@ -1,10 +1,10 @@
+require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 const FormData = require("form-data");
-require("dotenv").config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
   res.send("✅ AnimeGAN API is running!");
@@ -12,52 +12,53 @@ app.get("/", (req, res) => {
 
 app.get("/generate", async (req, res) => {
   const imageUrl = req.query.imageUrl;
-  const replicateApiKey = process.env.REPLICATE_API_KEY;
-
-  if (!imageUrl) return res.status(400).send("❌ imageUrl parameter is missing");
+  if (!imageUrl) return res.status(400).send("❌ Error: imageUrl is required");
 
   try {
+    const formData = new FormData();
+    formData.append("version", "your_model_version_id"); // <- replace with your model version ID
+    formData.append("input", JSON.stringify({ image: imageUrl }));
+
     const response = await axios.post(
       "https://api.replicate.com/v1/predictions",
-      {
-        version: "cb05b9f82b145c229351f27c4c554be568a5d1b5f243fe5f0c1fd8b2f8a9c8b0", // AnimeGAN-v2 version
-        input: { image: imageUrl }
-      },
+      formData,
       {
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Token ${replicateApiKey}`
-        }
+          ...formData.getHeaders(),
+          Authorization: `Token ${process.env.REPLICATE_API_KEY}`,
+        },
       }
     );
 
     const getUrl = response.data.urls.get;
-    let outputUrl = null;
 
-    // Poll until result is ready
-    while (!outputUrl) {
+    // Poll until completed
+    let outputUrl = null;
+    while (true) {
       const result = await axios.get(getUrl, {
         headers: {
-          Authorization: `Token ${replicateApiKey}`
-        }
+          Authorization: `Token ${process.env.REPLICATE_API_KEY}`,
+        },
       });
 
       if (result.data.status === "succeeded") {
         outputUrl = result.data.output;
         break;
       } else if (result.data.status === "failed") {
-        return res.status(500).send("❌ Generation failed");
+        return res.status(500).send("❌ Error: Replicate processing failed");
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((r) => setTimeout(r, 1000));
     }
 
-    res.json({ anime_image_url: outputUrl });
+    res.json({ output: outputUrl });
+
   } catch (err) {
-    console.error(err);
+    console.error(err.response?.data || err.message);
     res.status(500).send("❌ Error: Failed to process image.");
   }
 });
 
-app.listen(port, () => {
-  console.log(`✅
+app.listen(PORT, () => {
+  console.log(`✅ Server is running on port ${PORT}`);
+});
