@@ -1,59 +1,63 @@
 const express = require("express");
 const axios = require("axios");
+const fs = require("fs");
+const FormData = require("form-data");
 const app = express();
 app.use(express.json());
 
-const REPLICATE_API_TOKEN = "r8_7CKaIoEtChrCWUz08HFd3s6nkpAcZer1FHG9o"; // yahi tumhara token hai
+async function downloadAndUploadAnimeImage(imageUrl) {
+  const response = await axios.get(imageUrl, { responseType: 'stream' });
+  const writer = fs.createWriteStream("anime_output.png");
+  response.data.pipe(writer);
 
-app.get("/", (req, res) => {
-  res.send("AnimeGANv2 API is running.");
-});
+  await new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
 
-app.get("/generate", async (req, res) => {
-  const imageUrl = req.query.imageUrl;
-  if (!imageUrl) return res.status(400).json({ error: "Missing imageUrl parameter" });
+  const form = new FormData();
+  form.append("reqtype", "fileupload");
+  form.append("fileToUpload", fs.createReadStream("anime_output.png"));
 
+  const upload = await axios.post("https://catbox.moe/user/api.php", form, {
+    headers: form.getHeaders()
+  });
+
+  return upload.data;
+}
+
+app.post("/anime", async (req, res) => {
   try {
-    const replicateResponse = await axios.post(
+    const { image_url } = req.body;
+
+    const prediction = await axios.post(
       "https://api.replicate.com/v1/predictions",
       {
-        version: "0cfc4235d889c6f1f20942a0fb51d8be3cf408b5b5bbf9e380b032c0cf94f45b", // AnimeGANv2 version
-        input: { image: imageUrl }
+        version: "animegan-model-version-id",
+        input: { image: image_url }
       },
       {
         headers: {
-          Authorization: `Token ${REPLICATE_API_TOKEN}`,
+          Authorization: `Token YOUR_REPLICATE_API_KEY`,
           "Content-Type": "application/json"
         }
       }
     );
 
-    const prediction = replicateResponse.data;
-    const getFinal = await waitUntilComplete(prediction.urls.get);
-    const output = getFinal.output;
+    const outputUrl = prediction.data?.urls?.get;
+    const finalResult = await axios.get(outputUrl, {
+      headers: { Authorization: `Token YOUR_REPLICATE_API_KEY` }
+    });
 
-    if (!output) return res.status(500).json({ error: "Failed to get output" });
-    res.json({ imageUrl: output });
+    const animeImageUrl = finalResult.data?.output[0];
+    const permanentUrl = await downloadAndUploadAnimeImage(animeImageUrl);
+
+    res.json({ anime_image_url: permanentUrl });
 
   } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Replicate API call failed" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to generate anime image" });
   }
 });
 
-// Helper: wait until output ready
-async function waitUntilComplete(url) {
-  while (true) {
-    const res = await axios.get(url, {
-      headers: {
-        Authorization: `Token ${REPLICATE_API_TOKEN}`
-      }
-    });
-    if (res.data.status === "succeeded") return res.data;
-    if (res.data.status === "failed") throw new Error("Generation failed");
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-}
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+app.listen(3000, () => console.log("AnimeGAN API running on port 3000"));
