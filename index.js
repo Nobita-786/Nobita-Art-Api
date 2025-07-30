@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("✅ AnimeGAN API is running!");
+  res.send("✅ Nobita AnimeGAN API is working!");
 });
 
 app.get("/generate", async (req, res) => {
@@ -15,43 +15,40 @@ app.get("/generate", async (req, res) => {
   if (!imageUrl) return res.status(400).send("❌ Error: imageUrl is required");
 
   try {
-    const formData = new FormData();
-    formData.append("version", "your_model_version_id"); // <- replace with your model version ID
-    formData.append("input", JSON.stringify({ image: imageUrl }));
-
     const response = await axios.post(
       "https://api.replicate.com/v1/predictions",
-      formData,
+      {
+        version: "d998ef1cfa0c9c192311540cf59df67d6a548eab61a3f41b5e61bdaac0110993", // AnimeGANv2 model version
+        input: { image: imageUrl }
+      },
       {
         headers: {
-          ...formData.getHeaders(),
           Authorization: `Token ${process.env.REPLICATE_API_KEY}`,
-        },
+          "Content-Type": "application/json"
+        }
       }
     );
 
-    const getUrl = response.data.urls.get;
+    const prediction = response.data;
+    const getUrl = prediction.urls.get;
 
-    // Poll until completed
-    let outputUrl = null;
+    // Poll for result
+    let result;
     while (true) {
-      const result = await axios.get(getUrl, {
+      const poll = await axios.get(getUrl, {
         headers: {
-          Authorization: `Token ${process.env.REPLICATE_API_KEY}`,
-        },
+          Authorization: `Token ${process.env.REPLICATE_API_KEY}`
+        }
       });
 
-      if (result.data.status === "succeeded") {
-        outputUrl = result.data.output;
-        break;
-      } else if (result.data.status === "failed") {
-        return res.status(500).send("❌ Error: Replicate processing failed");
-      }
+      result = poll.data;
 
-      await new Promise((r) => setTimeout(r, 1000));
+      if (result.status === "succeeded") break;
+      if (result.status === "failed") return res.status(500).send("❌ Generation failed.");
+      await new Promise(r => setTimeout(r, 1500));
     }
 
-    res.json({ output: outputUrl });
+    return res.json({ output: result.output });
 
   } catch (err) {
     console.error(err.response?.data || err.message);
@@ -60,5 +57,5 @@ app.get("/generate", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Server is running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
