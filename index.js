@@ -1,8 +1,8 @@
-require("dotenv").config();
-const express = require("express");
-const axios = require("axios");
-const FormData = require("form-data");
+import express from "express";
+import axios from "axios";
+import dotenv from "dotenv";
 
+dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -18,7 +18,7 @@ app.get("/generate", async (req, res) => {
     const response = await axios.post(
       "https://api.replicate.com/v1/predictions",
       {
-        version: "d998ef1cfa0c9c192311540cf59df67d6a548eab61a3f41b5e61bdaac0110993", // AnimeGANv2 model version
+        version: "d998ef1cfa0c9c192311540cf59df67d6a548eab61a3f41b5e61bdaac0110993",
         input: { image: imageUrl }
       },
       {
@@ -32,7 +32,6 @@ app.get("/generate", async (req, res) => {
     const prediction = response.data;
     const getUrl = prediction.urls.get;
 
-    // Poll for result
     let result;
     while (true) {
       const poll = await axios.get(getUrl, {
