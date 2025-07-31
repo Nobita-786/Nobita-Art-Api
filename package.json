@@ -1,15 +1,27 @@
 {
-  "name": "anime-style-api",
+  "name": "anime-art-api",
   "version": "1.0.0",
+  "description": "Custom Anime Style Image API using Replicate models",
   "main": "index.js",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "node-fetch": "^3.3.2",
-    "replicate": "^0.21.0",
-    "cors": "^2.8.5"
-  }
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "anime",
+    "api",
+    "replicate",
+    "image-generation"
+  ],
+  "author": "Raj",
+  "license": "MIT"
 }
