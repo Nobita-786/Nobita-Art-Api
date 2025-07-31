@@ -1,70 +1,78 @@
 const express = require("express");
 const axios = require("axios");
-require("dotenv").config();
 const app = express();
-const models = require("./models");
+require("dotenv").config();
 
 app.get("/", (req, res) => {
   res.send("✅ Nobita AnimeGAN API is working!");
 });
 
 app.get("/generate", async (req, res) => {
+  const imageUrl = req.query.imageUrl;
+  const modelNumber = req.query.modelNumber || "1"; // Default model
+
+  if (!imageUrl) return res.status(400).json({ error: "Missing imageUrl" });
+
   try {
-    const { imageUrl, modelNumber } = req.query;
-
-    if (!imageUrl || !modelNumber) {
-      return res.status(400).json({ error: "Missing imageUrl or modelNumber" });
-    }
-
-    const model = models[modelNumber];
-    if (!model) {
-      return res.status(400).json({ error: "Invalid model number" });
-    }
-
-    const prediction = await axios.post(
-      `https://api.replicate.com/v1/predictions`,
+    const response = await axios.post(
+      "https://api.replicate.com/v1/predictions",
       {
-        version: model,
+        version: getModelVersion(modelNumber),
         input: { image: imageUrl }
       },
       {
         headers: {
-          Authorization: `Token ${process.env.REPLICATE_API_TOKEN}`,
+          Authorization: `Token ${process.env.REPLICATE_API_KEY}`,
           "Content-Type": "application/json"
         }
       }
     );
 
-    const predictionId = prediction.data.id;
-
-    // Poll for completion
+    const getUrl = response.data.urls.get;
     let outputUrl = null;
-    while (true) {
-      const statusCheck = await axios.get(
-        `https://api.replicate.com/v1/predictions/${predictionId}`,
-        {
-          headers: {
-            Authorization: `Token ${process.env.REPLICATE_API_TOKEN}`
-          }
-        }
-      );
 
-      if (statusCheck.data.status === "succeeded") {
-        outputUrl = statusCheck.data.output;
+    // Polling until the output is ready
+    for (let i = 0; i < 20; i++) {
+      const statusRes = await axios.get(getUrl, {
+        headers: {
+          Authorization: `Token ${process.env.REPLICATE_API_KEY}`
+        }
+      });
+
+      if (statusRes.data.status === "succeeded") {
+        outputUrl = statusRes.data.output;
         break;
-      } else if (statusCheck.data.status === "failed") {
-        throw new Error("Model failed to generate output");
+      } else if (statusRes.data.status === "failed") {
+        return res.status(500).json({ error: "Generation failed" });
       }
 
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+
+    if (!outputUrl) {
+      return res.status(500).json({ error: "Timed out waiting for output" });
     }
 
     res.json({ imageUrl: outputUrl });
-  } catch (error) {
-    console.error("❌ Error:", error.message);
+  } catch (err) {
+    console.error("Error generating image:", err);
     res.status(500).json({ error: "Failed to process image" });
   }
 });
 
+function getModelVersion(modelNumber) {
+  const models = {
+    "1": "a9ebc1763abc4edb8c3759d2ecba05b3", // AnimeGANv2 (Hayao)
+    "2": "7b16f5c74bdf4d6b8ce43f2f4e4f04a5", // AnimeGANv2 (Paprika)
+    "3": "28e30be8b03a49aaae6fb47bf2029f0e", // CartoonGAN (Shinkai)
+    "4": "db21e9d1bfb04c9eb49f83baf194ce2f", // Arcane-style
+    "5": "c3f406234b1f405b9d7b2c2e3e8e8fa4"  // Naruto style
+  };
+
+  return `replicate/${models[modelNumber]}`;
+}
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
