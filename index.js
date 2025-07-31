@@ -1,6 +1,6 @@
 import express from "express";
-import Replicate from "replicate";
 import cors from "cors";
+import Replicate from "replicate";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -8,35 +8,35 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 
 const replicate = new Replicate({
-  auth: "r8_HnKrKiaBeULPphI4kvAaAwVUFWa9cVP3F2IBi", // Tumhara Replicate API key
+  auth: process.env.REPLICATE_API_TOKEN || "r8_HnKrKiaBeULPphI4kvAaAwVUFWa9cVP3F2IBi", // Replace with your token if needed
 });
 
-const modelList = [
-  "naklezz/animegan-v2", // 0
-  "tencentarc/gfpgan",   // 1
-  "cjwbw/ghost-style",   // 2
-  "tencentarc/stylegan-v", // 3
-  "jingyunliang/style-swin", // 4
-  "nateraw/ghibli-diffusion", // 5
-  "lllyasviel/controlnet", // 6
-  "deepset/roberta-base-squad2", // 7
-  "ai-forever/kandinsky-2.1", // 8
-  "stability-ai/sdxl", // 9
-  "cjwbw/cartoon-style", // 10
-  "lucataco/anime-pencil", // 11
-  "lambdal/text-to-pokemon", // 12
-  "zero-shots/backdrop-removal", // 13
-  "monster-labs/anime-style", // 14
-  "mehdidc/anime-diffusion", // 15
-  "runwayml/stable-diffusion-v1-5", // 16
-  "prompthero/openjourney", // 17
-  "dreamlike-art/dreamlike-photoreal-2.0", // 18
-  "stability-ai/stable-diffusion", // 19
-  "fofr/sdxl-anime", // 20
-  "fofr/anything-v3", // 21
-  "t2i-adapter/anime", // 22
-  "nerijs/pixel-art-xl", // 23
-  "fofr/anime-portrait" // 24
+const models = [
+  "tencentarc/gfpgan", // 1
+  "stability-ai/stable-diffusion", // 2
+  "cjwbw/animeganv2", // 3
+  "nitrosocke/portraitplus", // 4
+  "deepset/roberta-base-squad2", // 5
+  "andreasjansson/stable-diffusion-cartoon", // 6
+  "kandinsky-community/kandinsky-2-2-decoder", // 7
+  "zhoont/xformers-animegan", // 8
+  "runwayml/stable-diffusion-v1-5", // 9
+  "digiplay/pixel-animegan", // 10
+  "roneneldan/anime-pencil-sketch", // 11
+  "lucataco/ghibli-style", // 12
+  "yunsik/anime-pastelgan", // 13
+  "lucataco/naruto-anime-style", // 14
+  "lucataco/anime-pixelart", // 15
+  "lucataco/onepiece-animegan", // 16
+  "lucataco/anime-lineart", // 17
+  "lucataco/bleach-style", // 18
+  "lucataco/ghibli-poster-style", // 19
+  "lucataco/anime-manga", // 20
+  "lucataco/spyxfamily", // 21
+  "lucataco/jojo-style", // 22
+  "lucataco/demon-slayer", // 23
+  "lucataco/attack-on-titan", // 24
+  "lucataco/tokyo-ghoul", // 25
 ];
 
 app.get("/", (req, res) => {
@@ -44,31 +44,29 @@ app.get("/", (req, res) => {
 });
 
 app.get("/generate", async (req, res) => {
-  const imageUrl = req.query.imageUrl;
-  const modelNumber = parseInt(req.query.modelNumber);
+  const { imageUrl, modelNumber } = req.query;
 
-  if (!imageUrl || isNaN(modelNumber) || modelNumber < 0 || modelNumber >= modelList.length) {
+  const index = parseInt(modelNumber) - 1;
+
+  if (!imageUrl || isNaN(index) || index < 0 || index >= models.length) {
     return res.status(400).json({ error: "Invalid imageUrl or modelNumber" });
   }
 
-  const model = modelList[modelNumber];
   try {
-    const output = await replicate.run(model, {
-      input: {
-        image: imageUrl
-      }
+    const output = await replicate.run(models[index], {
+      input: { image: imageUrl },
     });
 
-    // output may be array or string depending on model
-    const imageLink = Array.isArray(output) ? output[0] : output;
+    // some models return array, some return string
+    const result = Array.isArray(output) ? output[0] : output;
 
-    res.json({ imageUrl: imageLink });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to process image" });
+    return res.json({ imageUrl: result });
+  } catch (error) {
+    console.error("Error:", error.message);
+    return res.status(500).json({ error: "Failed to process image" });
   }
 });
 
 app.listen(port, () => {
-  console.log(`✅ Server running at http://localhost:${port}`);
+  console.log(`✅ Server is running on port ${port}`);
 });
