@@ -1,4 +1,3 @@
-// index.js
 const express = require("express");
 const runModel = require("./replicate");
 require("dotenv").config();
@@ -6,60 +5,60 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Map of model numbers to Replicate model versions
+// Map of 25 model numbers to their Replicate model versions
 const modelMap = {
-  1: "t2v-realisticvision", // Replace below with real Replicate versions
-  2: "cjwbw/animegan",
-  3: "nateraw/cartoonify",
-  4: "rinongal/ghibli-diffusion",
-  5: "nitrosocke/mo-di-diffusion",
-  6: "lucataco/anything-v3.0",
-  7: "andite/anything-v4.0",
-  8: "stability-ai/stable-diffusion",
-  9: "cjwbw/ghost-style",
-  10: "pharmapsychotic/kl-f8-anime2",
-  11: "camenduru/anime-style",
-  12: "prompthero/openjourney",
-  13: "gmgiorgi/portraitplus",
-  14: "kandinsky-community/kandinsky-2.2",
-  15: "lucidrains/stylegan2-pokemon",
-  16: "cjwbw/vintage-style",
-  17: "aws-pony/magic-style",
-  18: "upscayl/upscayl-enhance",
-  19: "tencentarc/gfpgan",
-  20: "yisol/anime-pose",
-  21: "lambdal/text-to-pokemon",
-  22: "p1atdev/ghibli-style",
-  23: "gmgiorgi/monet-style",
-  24: "cjwbw/sketch2anime",
-  25: "brianandrew/arcane-style"
+  1: "cjwbw/animegan",
+  2: "lucataco/naruto-gan",
+  3: "fofr/counterfeit-v30",
+  4: "naklecha/ghibli-vision",
+  5: "tstramer/anime-style-transfer",
+  6: "cjwbw/anything-v4",
+  7: "tstramer/animegan-v2",
+  8: "gsdf/Counterfeit-V2.5",
+  9: "mrfantastic/mid-anime-style",
+  10: "cjwbw/toonify",
+  11: "fofr/portrait-plus",
+  12: "lucataco/pokemon-generator",
+  13: "ai-forever/kandinsky-2.1",
+  14: "cjwbw/chibi-style",
+  15: "openai/consistency-decoder",
+  16: "runwayml/stable-diffusion-v1-5",
+  17: "lucataco/onepiece-style",
+  18: "fofr/shinkai-style",
+  19: "tstramer/mangafan",
+  20: "lucataco/ghibli-style-v2",
+  21: "replicate/anything-v5",
+  22: "lucataco/spyxfamily-vision",
+  23: "naklecha/bleach-style",
+  24: "lucataco/jujutsu-vibe",
+  25: "cjwbw/anime-mix-v4"
 };
 
 app.get("/", (req, res) => {
-  res.send("✅ Nobita AnimeGAN API is working!");
+  res.send("✅ Anime Art API with 25 Models is Running");
 });
 
-app.get("/generate", async (req, res) => {
-  const imageUrl = req.query.imageUrl;
-  const modelNumber = parseInt(req.query.modelNumber);
+app.get("/art", async (req, res) => {
+  const { imageUrl, modelNumber } = req.query;
 
-  if (!imageUrl || !modelNumber || !modelMap[modelNumber]) {
-    return res.status(400).json({
-      error: "Missing or invalid 'imageUrl' or 'modelNumber' (1-25)."
-    });
+  if (!imageUrl || !modelNumber) {
+    return res.status(400).json({ error: "Missing imageUrl or modelNumber" });
   }
 
-  const modelVersion = modelMap[modelNumber];
+  const version = modelMap[modelNumber];
+
+  if (!version) {
+    return res.status(400).json({ error: "Invalid model number. Use 1 to 25" });
+  }
 
   try {
-    const output = await runModel(imageUrl, modelVersion);
-    res.json({ imageUrl: output });
-  } catch (err) {
-    console.error("❌ Error:", err.message);
-    res.status(500).json({ error: "Failed to process image" });
+    const outputUrl = await runModel(imageUrl, version);
+    res.json({ imageUrl: outputUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`✅ Server started on port ${PORT}`);
 });
