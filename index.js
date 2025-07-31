@@ -1,64 +1,62 @@
-const express = require("express");
-const runModel = require("./replicate");
-require("dotenv").config();
-
+const express = require('express');
+const runModel = require('./replicate');
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Map of 25 model numbers to their Replicate model versions
-const modelMap = {
-  1: "cjwbw/animegan",
-  2: "lucataco/naruto-gan",
-  3: "fofr/counterfeit-v30",
-  4: "naklecha/ghibli-vision",
-  5: "tstramer/anime-style-transfer",
-  6: "cjwbw/anything-v4",
-  7: "tstramer/animegan-v2",
-  8: "gsdf/Counterfeit-V2.5",
-  9: "mrfantastic/mid-anime-style",
-  10: "cjwbw/toonify",
-  11: "fofr/portrait-plus",
-  12: "lucataco/pokemon-generator",
-  13: "ai-forever/kandinsky-2.1",
-  14: "cjwbw/chibi-style",
-  15: "openai/consistency-decoder",
-  16: "runwayml/stable-diffusion-v1-5",
-  17: "lucataco/onepiece-style",
-  18: "fofr/shinkai-style",
-  19: "tstramer/mangafan",
-  20: "lucataco/ghibli-style-v2",
-  21: "replicate/anything-v5",
-  22: "lucataco/spyxfamily-vision",
-  23: "naklecha/bleach-style",
-  24: "lucataco/jujutsu-vibe",
-  25: "cjwbw/anime-mix-v4"
-};
-
-app.get("/", (req, res) => {
-  res.send("✅ Anime Art API with 25 Models is Running");
+app.get('/', (req, res) => {
+  res.send('✅ Anime Art API is Live!');
 });
 
-app.get("/art", async (req, res) => {
+app.get('/api/art', async (req, res) => {
   const { imageUrl, modelNumber } = req.query;
 
-  if (!imageUrl || !modelNumber) {
+  if (!imageUrl || modelNumber === undefined) {
     return res.status(400).json({ error: "Missing imageUrl or modelNumber" });
   }
 
-  const version = modelMap[modelNumber];
+  const models = [
+    "cjwbw/animegan",          // model 0
+    "tencentarc/gfpgan",       // model 1
+    "nitrosocke/arcane-diffusion", // model 2
+    "nitrosocke/redshift-diffusion", // model 3
+    "prompthero/openjourney",  // model 4
+    "lambdal/text-to-pokemon", // model 5
+    "stability-ai/stable-diffusion", // model 6
+    "stability-ai/sdxl",       // model 7
+    "andreasjansson/stylegan-t", // model 8
+    "fofr/superresolution",    // model 9
+    "fofr/repaint",            // model 10
+    "lucataco/anime-line-art", // model 11
+    "cjwbw/animeganv2",        // model 12
+    "kvfrans/clipdraw",        // model 13
+    "artificialguybr/art-to-pixel", // model 14
+    "jingyunliang/swinir",     // model 15
+    "thibaud/controlnet-openpose", // model 16
+    "kandinsky-community/kandinsky-2-2", // model 17
+    "monster-labs/controlnet-monster", // model 18
+    "openai/whisper",          // model 19
+    "cjwbw/cartoon",           // model 20
+    "stability-ai/stable-diffusion-xl", // model 21
+    "lokesh/anime2sketch",     // model 22
+    "yuntian-deng/real-esrgan", // model 23
+    "replicate/deepdanbooru",  // model 24
+  ];
 
-  if (!version) {
-    return res.status(400).json({ error: "Invalid model number. Use 1 to 25" });
+  const index = parseInt(modelNumber);
+  const selectedModel = models[index];
+
+  if (!selectedModel) {
+    return res.status(400).json({ error: "Invalid model number." });
   }
 
   try {
-    const outputUrl = await runModel(imageUrl, version);
-    res.json({ imageUrl: outputUrl });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const result = await runModel(imageUrl, selectedModel);
+    res.json({ imageUrl: result });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to generate image", details: err.message });
   }
 });
 
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Server started on port ${PORT}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
