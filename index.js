@@ -1,48 +1,70 @@
 const express = require("express");
-const Replicate = require("replicate");
-const dotenv = require("dotenv");
-const cors = require("cors");
-
-dotenv.config();
-
+const axios = require("axios");
+require("dotenv").config();
 const app = express();
-app.use(cors());
+const models = require("./models");
 
-const replicate = new Replicate({
-  auth: process.env.REPLICATE_API_KEY,
-});
-
-// Root route
 app.get("/", (req, res) => {
   res.send("✅ Nobita AnimeGAN API is working!");
 });
 
-// Main generate route
 app.get("/generate", async (req, res) => {
   try {
-    const imageUrl = req.query.imageUrl;
-    if (!imageUrl) {
-      return res.status(400).json({ error: "Missing imageUrl parameter" });
+    const { imageUrl, modelNumber } = req.query;
+
+    if (!imageUrl || !modelNumber) {
+      return res.status(400).json({ error: "Missing imageUrl or modelNumber" });
     }
 
-    const output = await replicate.run(
-      "tencentarc/animeganv2:25d40dfce8c678c5b0c594d62eabfac53fdf3937c42c50d59efc1f0b4e4c17b3",
+    const model = models[modelNumber];
+    if (!model) {
+      return res.status(400).json({ error: "Invalid model number" });
+    }
+
+    const prediction = await axios.post(
+      `https://api.replicate.com/v1/predictions`,
       {
-        input: {
-          image: imageUrl,
-        },
+        version: model,
+        input: { image: imageUrl }
+      },
+      {
+        headers: {
+          Authorization: `Token ${process.env.REPLICATE_API_TOKEN}`,
+          "Content-Type": "application/json"
+        }
       }
     );
 
-    res.json({ output });
-  } catch (err) {
-    console.error("❌ Error in /generate:", err);
-    res.status(500).json({ error: "Failed to process image." });
+    const predictionId = prediction.data.id;
+
+    // Poll for completion
+    let outputUrl = null;
+    while (true) {
+      const statusCheck = await axios.get(
+        `https://api.replicate.com/v1/predictions/${predictionId}`,
+        {
+          headers: {
+            Authorization: `Token ${process.env.REPLICATE_API_TOKEN}`
+          }
+        }
+      );
+
+      if (statusCheck.data.status === "succeeded") {
+        outputUrl = statusCheck.data.output;
+        break;
+      } else if (statusCheck.data.status === "failed") {
+        throw new Error("Model failed to generate output");
+      }
+
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    res.json({ imageUrl: outputUrl });
+  } catch (error) {
+    console.error("❌ Error:", error.message);
+    res.status(500).json({ error: "Failed to process image" });
   }
 });
 
-// Start server
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`🚀 Server listening on port ${port}`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
