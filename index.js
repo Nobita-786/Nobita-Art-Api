@@ -1,74 +1,75 @@
 import express from "express";
 import dotenv from "dotenv";
+import Replicate from "replicate";
 import cors from "cors";
-import fetch from "node-fetch";
 
 dotenv.config();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const port = process.env.PORT || 3000;
 
-const replicate_api = process.env.REPLICATE_API_TOKEN;
+app.use(cors());
+
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
 
 app.get("/", (req, res) => {
-  res.send("🟢 Nobita Anime Art API is running!");
+  res.send("Anime Art API by Raj is running!");
 });
 
 app.get("/generate", async (req, res) => {
   const { imageUrl, modelNumber } = req.query;
 
   if (!imageUrl || !modelNumber) {
-    return res.status(400).json({ error: "Invalid imageUrl or modelNumber" });
+    return res.status(400).json({ error: "Missing imageUrl or modelNumber" });
   }
 
-  const models = {
-    1: "tencentarc/gfpgan",
-    2: "stability-ai/stable-diffusion",
-    3: "naklecha/animegan-v2",
-    4: "kakaobrain/karlo-v1-alpha",
-    5: "tstramer/animegan",
-    6: "fofr/anything-v3.0",
-    7: "fofr/anything-v4.0",
-    8: "hysts/animegan2-pytorch:orange",
-    9: "cjwbw/animeganv2",
-    10: "lucataco/animegan",
-    // ... up to 25 models if needed
-  };
-
-  const model = models[modelNumber];
-  if (!model) return res.status(400).json({ error: "Invalid model number" });
-
   try {
-    const response = await fetch(`https://api.replicate.com/v1/predictions`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Token ${replicate_api}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        version: "latest",
-        input: { image: imageUrl },
-        model: model
-      })
+    const modelMap = {
+      1: "tencentarc/animeganv2:31ce08835578ec96063b1b6da4fc0d27b144e51c01d122b24aaa15d705b3c327",
+      2: "tstramer/cartoon-gan:ec2dc6d450ae15e2740e35df2a183d843be5ec62b318dfb5bfae574f5265869a",
+      3: "naklecha/ghibli-gan:dc0c5e9dc96f2e58a46c4c6973a57c7f2ae8fa9bd6a6b09f50ff2bc04cbf32e7",
+      4: "p1atdev/naruto-art:f92d5c7ed03cd91a86b4e6d4177b6a12c9a7ee54f5a88f7a9010a7b2c56c5f49",
+      5: "fofr/animagine-xl:8c922aaf57e9ba53d54b8c9ff737f5d76f6b62e6e51c34b5a150c6de2b2767c0"
+    };
+
+    const selectedModel = modelMap[modelNumber];
+    if (!selectedModel) {
+      return res.status(400).json({ error: "Invalid model number" });
+    }
+
+    const prediction = await replicate.predictions.create({
+      version: selectedModel,
+      input: { image: imageUrl },
     });
 
-    const data = await response.json();
+    // Poll until image is ready
+    let output = null;
+    let retries = 0;
+    while (!output && retries < 10) {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // 2 sec wait
+      const poll = await replicate.predictions.get(prediction.id);
+      if (poll.status === "succeeded") {
+        output = poll.output;
+      } else if (poll.status === "failed") {
+        return res.status(500).json({ error: "Image generation failed" });
+      }
+      retries++;
+    }
 
-    if (data.error) return res.status(500).json({ error: "Failed to process image" });
+    if (output) {
+      res.json({ imageUrl: output });
+    } else {
+      res.status(408).json({ error: "Image generation timeout" });
+    }
 
-    const outputUrl = data?.urls?.get || data?.output;
-    if (!outputUrl) return res.status(500).json({ error: "Output not ready" });
-
-    return res.json({ imageUrl: outputUrl });
-
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Internal server error" });
+  } catch (err) {
+    console.error("API Error:", err);
+    res.status(500).json({ error: "Something went wrong" });
   }
 });
 
-const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`✅ API started on port ${port}`);
+  console.log(`✅ Server is running at http://localhost:${port}`);
 });
