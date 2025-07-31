@@ -1,45 +1,47 @@
-// replicate.js
 const axios = require("axios");
-require("dotenv").config();
-
-const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
 async function runModel(imageUrl, modelVersion) {
-  const response = await axios.post(
+  const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+
+  const [owner, name] = modelVersion.split("/");
+
+  const versionUrl = `https://api.replicate.com/v1/models/${owner}/${name}`;
+  const versionResponse = await axios.get(versionUrl, {
+    headers: {
+      Authorization: `Token ${REPLICATE_API_TOKEN}`,
+    },
+  });
+
+  const version = versionResponse.data.latest_version.id;
+
+  const prediction = await axios.post(
     "https://api.replicate.com/v1/predictions",
     {
-      version: modelVersion,
-      input: { image: imageUrl }
+      version,
+      input: { image: imageUrl },
     },
     {
       headers: {
-        "Authorization": `Token ${REPLICATE_API_TOKEN}`,
-        "Content-Type": "application/json"
-      }
+        Authorization: `Token ${REPLICATE_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
     }
   );
 
-  const getUrl = response.data.urls.get;
-
-  let result;
-  while (true) {
-    const res = await axios.get(getUrl, {
-      headers: {
-        Authorization: `Token ${REPLICATE_API_TOKEN}`
-      }
-    });
-
-    if (res.data.status === "succeeded") {
-      result = res.data.output;
-      break;
-    } else if (res.data.status === "failed") {
-      throw new Error("Replicate model failed to process.");
+  const getStatus = async (url) => {
+    while (true) {
+      const res = await axios.get(url, {
+        headers: {
+          Authorization: `Token ${REPLICATE_API_TOKEN}`,
+        },
+      });
+      if (res.data.status === "succeeded") return res.data.output;
+      else if (res.data.status === "failed") throw new Error("Generation failed");
+      await new Promise((r) => setTimeout(r, 1500));
     }
+  };
 
-    await new Promise(resolve => setTimeout(resolve, 1500));
-  }
-
-  return result;
+  return await getStatus(prediction.data.urls.get);
 }
 
 module.exports = runModel;
